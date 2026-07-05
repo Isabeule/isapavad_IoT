@@ -1,14 +1,4 @@
-# Vagrant
-.vagrant/
-
-# Token K3s généré pendant les tests
 node-token
-
-# Fichiers contenant des secrets
-.env
-
-# Éditeurs
-*.swp
-*~
-
-*.log
+.vagrant/
+node-token
+.vagrant/
