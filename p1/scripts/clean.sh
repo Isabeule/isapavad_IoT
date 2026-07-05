@@ -6,7 +6,6 @@ vagrant destroy -f || true
 
 echo "[INFO] Suppression des domaines libvirt restants..."
 for vm in $(virsh list --all --name | grep '^p1_'); do
-do
     echo "Suppression de $vm"
     virsh destroy "$vm" 2>/dev/null || true
     virsh undefine "$vm" --remove-all-storage 2>/dev/null || true
