@@ -1,0 +1,38 @@
+Nettoyage:
+vagrant destroy -f
+rm -rf .vagrant
+rm -f node-token
+vagrant status
+virsh list --all
+
+=========================
+Nettoyage supplementaire:
+virsh destroy p1_isapavadS 2>/dev/null || true
+virsh undefine p1_isapavadS --remove-all-storage 2>/dev/null || true
+
+virsh destroy p1_isapavadSW 2>/dev/null || true
+virsh undefine p1_isapavadSW --remove-all-storage 2>/dev/null || true
+
+rm -rf .vagrant
+rm -f node-token
+
+========================
+Vérification réseaux:
+virsh list --all
+virsh net-list --all
+
+=========================
+Récup token manuellement:
+
+vagrant ssh isapavadS -c "sudo cat /var/lib/rancher/k3s/server/node-token" | tr -d '\r' > node-token
+
+cat -A node-token
+
+========================
+Lire le token dans la VM
+vagrant ssh isapavadS
+sudo at -A /var/lib/rancher/k3s/server/node-token
+
+========================
+cockpit
+http://127.0.0.1:9090
