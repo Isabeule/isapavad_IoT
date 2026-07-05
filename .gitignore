@@ -1,4 +1,2 @@
-node-token
-.vagrant/
-node-token
-.vagrant/
+**/node-token
+**/.vagrant/
