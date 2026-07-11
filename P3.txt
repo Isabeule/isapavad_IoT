@@ -10,32 +10,15 @@ Il:
 Cluster = ensemble de machines sur lesquelles Kubernetes travaille.
 Cluster
 │
-├── Namespace X
-│     ├── Deployment X-server
-│     ├── Pod X-server
-│     └── Service X-server
-│
-└── Namespace Y
-      ├── Deployment application nommée YZ
-      ├── Pod YZ-abc123
-      ├── Pod YZ-def456
-      └── Service YZ
+└── Namespace
+    │
+    ├── Deployment
+    │   └── Pods
+    │
+    └── Service
 ================================================
 
 Namespace = Dossier logique dans un cluster.
-Exemple:
-Cluster Kubernetes
-
-├── Namespace argocd
-│   ├── pod argocd-server
-│   └── pod argocd-repo-server
-│
-├── Namespace dev
-│   ├── pod application
-│   └── service application
-│
-└── Namespace monitoring
-    └── pod prometheus
 
 Commandes importantes:
 - Créer un namespace: kubectl create namespace <nom du namespace>
@@ -43,7 +26,7 @@ Commandes importantes:
 - Voir les Pods dans un ns: kubectl get pods -n <nom du ns>
 ====================================================
 
-Pod execute le conteneur (l'application). C'est l'endroit où tourne un ou plusieurs conteneurs Docker.
+Pod exécute le conteneur (l'application). C'est l'endroit où tourne un ou plusieurs conteneurs Docker.
 Un Pod contient aussi :
 l'adresse IP ;
 les volumes ;
@@ -51,7 +34,7 @@ la configuration réseau ;
 les conteneurs.
 ======================================================
 
-Replica = nombre de copies de pod souhaite.
+Replica = nombre de copies de pod souhaité.
 Si replicas: 3, Kubernetes crée :
 Deployment
       │
