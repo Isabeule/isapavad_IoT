@@ -10,7 +10,7 @@ spec:
 
   source:
     repoURL: __REPOSITORY_URL__
-    targetRevision: HEAD
+    targetRevision: main
     path: p3/confs/app
 
   destination:
