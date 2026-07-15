@@ -7,99 +7,113 @@ readonly KUBECTL_CONTEXT="k3d-${CLUSTER_NAME}"
 
 readonly ARGOCD_NAMESPACE="argocd"
 readonly DEV_NAMESPACE="dev"
+readonly APPLICATION_NAME="iot-application"
 
 readonly ARGOCD_MANIFEST_URL="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
 
+readonly SCRIPT_DIR="$(
+    cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
+)"
+
+readonly P3_DIR="$(
+    cd "${SCRIPT_DIR}/.." && pwd
+)"
+
+readonly REPOSITORY_ROOT="$(
+    git -C "${P3_DIR}" rev-parse --show-toplevel 2>/dev/null
+)"
+
+readonly APPLICATION_TEMPLATE="${P3_DIR}/confs/argocd/application.yaml"
+
 info() {
-    echo "[INFO] $*"
+    printf '[INFO] %s\n' "$*"
 }
 
 success() {
-    echo "[SUCCESS] $*"
-}
-
-warning() {
-    echo "[WARNING] $*" >&2
+    printf '[SUCCESS] %s\n' "$*"
 }
 
 error() {
-    echo "[ERROR] $*" >&2
+    printf '[ERROR] %s\n' "$*" >&2
     exit 1
 }
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+cluster_exists() {
+    k3d cluster list --no-headers 2>/dev/null \
+        | awk '{print $1}' \
+        | grep -Fxq "${CLUSTER_NAME}"
 }
 
-on_error() {
-    local exit_code=$?
-    local line_number=$1
+normalize_repository_url() {
+    local url="$1"
 
-    echo "[ERROR] Échec du script à la ligne ${line_number}." >&2
-    exit "${exit_code}"
+    case "${url}" in
+        git@github.com:*)
+            printf 'https://github.com/%s\n' "${url#git@github.com:}"
+            ;;
+
+        ssh://git@github.com/*)
+            printf 'https://github.com/%s\n' "${url#ssh://git@github.com/}"
+            ;;
+
+        https://github.com/*)
+            printf '%s\n' "${url}"
+            ;;
+
+        *)
+            error "Le dépôt Git doit être hébergé sur GitHub : ${url}"
+            ;;
+    esac
 }
 
-trap 'on_error ${LINENO}' ERR
+[[ -n "${REPOSITORY_ROOT}" ]] \
+    || error "Ce projet doit être exécuté depuis un dépôt Git cloné."
 
-# ---------------------------------------------------------------------------
-# Vérification des dépendances
-# ---------------------------------------------------------------------------
+[[ -f "${APPLICATION_TEMPLATE}" ]] \
+    || error "Fichier absent : ${APPLICATION_TEMPLATE}"
 
-info "Vérification des dépendances..."
-
-command_exists kubectl \
-    || error "kubectl n'est pas installé.
-Exécuter d'abord : sudo ./scripts/install.sh"
-
-command_exists k3d \
-    || error "K3d n'est pas installé.
-Exécuter d'abord : sudo ./scripts/install.sh"
-
-# ---------------------------------------------------------------------------
-# Vérification du cluster K3d
-# ---------------------------------------------------------------------------
-
-if ! k3d cluster list --no-headers 2>/dev/null \
-    | awk '{print $1}' \
-    | grep -Fxq "${CLUSTER_NAME}"; then
-
-    error "Le cluster '${CLUSTER_NAME}' n'existe pas.
-Exécuter d'abord : ./scripts/create-cluster.sh"
-fi
-
-info "Sélection du contexte kubectl '${KUBECTL_CONTEXT}'..."
+cluster_exists \
+    || error "Le cluster '${CLUSTER_NAME}' n'existe pas."
 
 kubectl config use-context "${KUBECTL_CONTEXT}" >/dev/null
 
-if ! kubectl cluster-info >/dev/null 2>&1; then
-    error "Le cluster Kubernetes n'est pas accessible."
-fi
+kubectl cluster-info >/dev/null 2>&1 \
+    || error "Le cluster Kubernetes n'est pas accessible."
 
-success "Le cluster Kubernetes est accessible."
+readonly RAW_REPOSITORY_URL="$(
+    git -C "${REPOSITORY_ROOT}" remote get-url origin
+)"
+
+readonly REPOSITORY_URL="$(
+    normalize_repository_url "${RAW_REPOSITORY_URL}"
+)"
+
+info "Dépôt GitHub utilisé par Argo CD : ${REPOSITORY_URL}"
+
+git ls-remote "${REPOSITORY_URL}" HEAD >/dev/null 2>&1 \
+    || error "Le dépôt GitHub n'est pas accessible publiquement."
 
 # ---------------------------------------------------------------------------
-# Création des namespaces
+# Namespaces
 # ---------------------------------------------------------------------------
 
-info "Création du namespace '${ARGOCD_NAMESPACE}'..."
+info "Création des namespaces '${ARGOCD_NAMESPACE}' et '${DEV_NAMESPACE}'..."
 
 kubectl create namespace "${ARGOCD_NAMESPACE}" \
     --dry-run=client \
     --output yaml \
-    | kubectl apply --server-side --filename -
-
-info "Création du namespace '${DEV_NAMESPACE}'..."
+    | kubectl apply --filename -
 
 kubectl create namespace "${DEV_NAMESPACE}" \
     --dry-run=client \
     --output yaml \
-    | kubectl apply --server-side --filename -
+    | kubectl apply --filename -
 
 # ---------------------------------------------------------------------------
 # Installation d'Argo CD
 # ---------------------------------------------------------------------------
 
-info "Installation d'Argo CD avec Server-Side Apply..."
+info "Installation d'Argo CD..."
 
 kubectl apply \
     --server-side \
@@ -107,13 +121,11 @@ kubectl apply \
     --namespace "${ARGOCD_NAMESPACE}" \
     --filename "${ARGOCD_MANIFEST_URL}"
 
-success "Les ressources Argo CD ont été appliquées."
-
 # ---------------------------------------------------------------------------
-# Attente du démarrage des composants
+# Attente d'Argo CD
 # ---------------------------------------------------------------------------
 
-info "Attente du démarrage des composants Argo CD..."
+info "Attente des composants Argo CD..."
 
 kubectl rollout status \
     deployment/argocd-server \
@@ -126,184 +138,67 @@ kubectl rollout status \
     --timeout=300s
 
 kubectl rollout status \
-    deployment/argocd-dex-server \
-    --namespace "${ARGOCD_NAMESPACE}" \
-    --timeout=300s
-
-kubectl rollout status \
-    deployment/argocd-applicationset-controller \
-    --namespace "${ARGOCD_NAMESPACE}" \
-    --timeout=300s
-
-kubectl rollout status \
-    deployment/argocd-notifications-controller \
-    --namespace "${ARGOCD_NAMESPACE}" \
-    --timeout=300s
-
-kubectl rollout status \
     statefulset/argocd-application-controller \
     --namespace "${ARGOCD_NAMESPACE}" \
     --timeout=300s
 
-# ---------------------------------------------------------------------------
-# Vérification des pods
-# ---------------------------------------------------------------------------
-
-info "Attente de la disponibilité des pods Argo CD..."
-
 kubectl wait \
     --for=condition=Ready \
-    pods \
+    pod \
     --all \
     --namespace "${ARGOCD_NAMESPACE}" \
     --timeout=300s
 
 # ---------------------------------------------------------------------------
-# Vérification des CRD Argo CD
+# Création de l'Application Argo CD
 # ---------------------------------------------------------------------------
 
-info "Vérification des CustomResourceDefinitions Argo CD..."
+info "Création de l'Application Argo CD..."
 
-kubectl get crd applications.argoproj.io >/dev/null
-kubectl get crd applicationsets.argoproj.io >/dev/null
-kubectl get crd appprojects.argoproj.io >/dev/null
+temporary_manifest="$(mktemp)"
 
-success "Les CRD Argo CD sont disponibles."
+trap 'rm -f "${temporary_manifest}"' EXIT
+
+sed "s|__REPOSITORY_URL__|${REPOSITORY_URL}|g" \
+    "${APPLICATION_TEMPLATE}" \
+    > "${temporary_manifest}"
+
+kubectl apply \
+    --filename "${temporary_manifest}"
 
 # ---------------------------------------------------------------------------
-# Résumé
+# Synchronisation GitOps
 # ---------------------------------------------------------------------------
 
-echo
-success "Argo CD est installé et opérationnel."
-echo
+info "Attente de la synchronisation GitOps..."
 
-echo "Namespaces disponibles :"
-echo
+for _ in $(seq 1 120); do
+    sync_status="$(
+        kubectl get application "${APPLICATION_NAME}" \
+            --namespace "${ARGOCD_NAMESPACE}" \
+            --output jsonpath='{.status.sync.status}' \
+            2>/dev/null || true
+    )"
 
-kubectl get namespaces
+    health_status="$(
+        kubectl get application "${APPLICATION_NAME}" \
+            --namespace "${ARGOCD_NAMESPACE}" \
+            --output jsonpath='{.status.health.status}' \
+            2>/dev/null || true
+    )"
 
-echo
-echo "Pods Argo CD :"
-echo
+    if [[ "${sync_status}" == "Synced" \
+        && "${health_status}" == "Healthy" ]]; then
 
-kubectl get pods \
+        success "L'application Argo CD est Synced et Healthy."
+        exit 0
+    fi
+
+    sleep 5
+done
+
+kubectl get application "${APPLICATION_NAME}" \
     --namespace "${ARGOCD_NAMESPACE}" \
-    --output wide
+    --output wide || true
 
-echo
-echo "Déploiements Argo CD :"
-echo
-
-kubectl get deployments \
-    --namespace "${ARGOCD_NAMESPACE}"
-
-echo
-echo "Services Argo CD :"
-echo
-
-kubectl get services \
-    --namespace "${ARGOCD_NAMESPACE}"
-
-echo
-echo "CustomResourceDefinitions Argo CD :"
-echo
-
-kubectl get crd \
-    | grep 'argoproj.io' || true
-
-echo
-echo "Étapes de vérification :"
-echo
-
-echo "1. Vérifier les namespaces :"
-echo
-echo "   kubectl get namespaces"
-echo
-
-echo "2. Vérifier les pods Argo CD :"
-echo
-echo "   kubectl get pods -n ${ARGOCD_NAMESPACE}"
-echo
-
-echo "3. Vérifier les déploiements Argo CD :"
-echo
-echo "   kubectl get deployments -n ${ARGOCD_NAMESPACE}"
-echo
-
-echo "4. Vérifier les services Argo CD :"
-echo
-echo "   kubectl get services -n ${ARGOCD_NAMESPACE}"
-echo
-
-echo "5. Vérifier les CRD Argo CD :"
-echo
-echo "   kubectl get crd | grep argoproj.io"
-echo
-
-echo "6. Suivre les pods en temps réel si nécessaire :"
-echo
-echo "   kubectl get pods -n ${ARGOCD_NAMESPACE} -w"
-echo
-echo "   Quitter l'affichage avec Ctrl+C."
-
-echo
-echo "Accès local à l'interface Argo CD :"
-echo
-
-echo "7. Ouvrir un second terminal et lancer :"
-echo
-echo "   kubectl port-forward \\"
-echo "       service/argocd-server \\"
-echo "       --namespace ${ARGOCD_NAMESPACE} \\"
-echo "       8080:443"
-echo
-
-echo "8. Ouvrir ensuite dans le navigateur :"
-echo
-echo "   https://localhost:8080"
-echo
-echo "[INFO] Un avertissement de certificat est normal avec le certificat"
-echo "[INFO] autosigné utilisé par défaut par Argo CD."
-
-echo
-echo "Identifiants Argo CD :"
-echo
-
-echo "9. Nom d'utilisateur :"
-echo
-echo "   admin"
-echo
-
-echo "10. Récupérer le mot de passe initial :"
-echo
-echo "   kubectl --namespace ${ARGOCD_NAMESPACE} get secret \\"
-echo "       argocd-initial-admin-secret \\"
-echo "       --output jsonpath=\"{.data.password}\" \\"
-echo "       | base64 --decode && echo"
-echo
-
-echo "11. Se connecter avec le CLI Argo CD :"
-echo
-echo "   argocd login localhost:8080 \\"
-echo "       --username admin \\"
-echo "       --insecure"
-echo
-echo "[INFO] Le mot de passe sera demandé par la commande."
-
-echo
-echo "Étape suivante du projet :"
-echo
-
-echo "12. Créer les manifests Kubernetes de l'application wil42/playground :"
-echo
-echo "   confs/deployment.yaml"
-echo "   confs/service.yaml"
-echo "   confs/ingress.yaml"
-echo
-
-echo "13. Ajouter ces manifests dans le dépôt Git surveillé par Argo CD."
-echo
-
-echo "14. Créer une ressource Argo CD Application afin de synchroniser"
-echo "    automatiquement le dépôt Git avec le namespace '${DEV_NAMESPACE}'."
+error "Argo CD n'a pas atteint l'état Synced/Healthy dans le délai imparti."
