@@ -12,4 +12,4 @@ sh -
 # attendre que l'API server soit rdy
 until kubectl get nodes >/dev/null 2>&1; do sleep 2; done
 
-kubectl apply -f "/confs"
+kubectl apply -f /vagrant/confs
