@@ -1,32 +1,62 @@
 ENV["VAGRANT_NO_PARALLEL"] = "1"
 
 Vagrant.configure("2") do |config|
-  config.vm.box = "generic/ubuntu2204"
+
+  # Image Ubuntu utilisée pour les 2 machines.
+  config.vm.box = "bento/ubuntu-24.04"
+
+  # Utilisation de libvirt comme provider de virtualisation.
   config.vm.provider :libvirt
 
+
+  # Synchronise le dossier p1 de l'hôte avec /vagrant dans les VMs. 
   config.vm.synced_folder ".", "/vagrant", type: "rsync"
 
+
+# ------------------------------------------------------------
+# SERVER
+# ------------------------------------------------------------
+
+  # Définition de la machine K3s Server.
   config.vm.define "isapavadS" do |server|
+
+    # Nom d'hôte de la machine.
     server.vm.hostname = "isapavadS"
+
+    # Adresse IP privée imposée par le sujet.  
     server.vm.network "private_network", ip: "192.168.56.110"
 
+    # Ressources de la machine Ks3 Server.  
     server.vm.provider "libvirt" do |lv|
       lv.memory = 1024
       lv.cpus = 1
     end
 
+    # Installation et configuration de K3s en mode Server.
     server.vm.provision "shell", path: "scripts/server.sh"
   end
 
+  # ------------------------------------------------------------
+  # WORKER
+  # ------------------------------------------------------------
+
+  # Définition de la machine K3s Worker.
   config.vm.define "isapavadSW" do |worker|
+   
+    # Nom d'hôte de la machine.  
     worker.vm.hostname = "isapavadSW"
+
+    # Adresse IP privée imposée par le sujet.
     worker.vm.network "private_network", ip: "192.168.56.111"
 
+    # Ressources de la machine Ks3 Worker.
     worker.vm.provider "libvirt" do |lv|
       lv.memory = 1024
       lv.cpus = 1
     end
 
+    # Avant de démarrer le worker, attendre que le serveur ait créé
+    # son token K3s et que celui-ci soit disponible sur l'hôte.   
     worker.trigger.before :up do |trigger|
       trigger.info = "Waiting for K3s server token before starting worker"
       trigger.run = {
@@ -34,6 +64,8 @@ Vagrant.configure("2") do |config|
       }
     end
 
+    # Installation et configuration de K3s en mode Agent.  
     worker.vm.provision "shell", path: "scripts/agent.sh"
   end
 end
+

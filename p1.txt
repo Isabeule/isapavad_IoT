@@ -36,3 +36,28 @@ sudo at -A /var/lib/rancher/k3s/server/node-token
 ========================
 cockpit
 http://127.0.0.1:9090
+
+===========================
+Test sur la VM hôte:
+vagrant status
+
+========================
+TESTS A FAIRE DANS LES 2 VM VAGRANT
+vagrant ssh isapavadS
+hostname
+kubectl get nodes -o wide
+sudo systemctl is-active k3s
+ip a show eth1
+ip a show $(ip route | grep default | awk '{print $5}')
+logout
+
+vagrant ssh isapavadSW
+hostname
+sudo systemctl is-active k3s-agent
+ip a show eth1
+ip a show $(ip route | grep default | awk '{print $5}')
+logout
+
+===============================================
+
+
