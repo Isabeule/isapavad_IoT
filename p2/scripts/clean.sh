@@ -50,8 +50,18 @@ echo "[INFO] Réseaux libvirt :"
 virsh net-list --all
 
 echo
-echo "[INFO] Volumes restants dans le pool 'default' :"
-virsh -c qemu:///system vol-list --pool default 2>/dev/null || true
+echo "[INFO] Volumes p2_* restants dans le pool 'default' (doit être vide) :"
+virsh -c qemu:///system vol-list --pool default 2>/dev/null | grep "p2_" || echo "  (aucun)"
+
+echo
+echo "[INFO] Suppression du dossier .vagrant..."
+
+if [ -d ".vagrant" ]; then
+    rm -rf .vagrant
+    echo "[INFO] Dossier .vagrant supprimé."
+else
+    echo "[INFO] Aucun dossier .vagrant à supprimer."
+fi
 
 echo
 echo "[SUCCESS] Nettoyage terminé."
