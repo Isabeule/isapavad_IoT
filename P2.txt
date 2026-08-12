@@ -1,0 +1,42 @@
+Vagrant crée la VM
+        ↓
+configure eth0/eth1
+        ↓
+network.sh
+        ↓
+corrige les routes
+        ↓
+server.sh
+        ↓
+K3s
+
+==============================
+Avant de lancer un vagrant up et s'assurer d'éviter les guru mediation:
+
+- Vérifier la RAM/CPU:
+free -h
+nproc
+
+- Mettre à jour libvirt/qemu pour éviter certains bugs d'affichage virtuel:
+sudo apt update && sudo apt upgrade qemu-kvm libvirt-daemon-system
+
+===============================
+PREMIERS TESTS:
+1. sur la VM hôte:
+vagrant status
+
+2. sur la VM vagrant:
+vagrant ssh
+hostname
+kubectl get nodes -o wide
+
+
+Pour vérifier la dernière version stable de l'image de base (box):
+cat /etc/os-release | grep PRETTY_NAME
+
+ip a show eth1
+
+sudo systemctl status k3s --no-pager
+
+kubectl get deployments
+kubectl get pods -o wide

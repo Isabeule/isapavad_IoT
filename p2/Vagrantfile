@@ -1,7 +1,7 @@
 ENV["VAGRANT_NO_PARALLEL"] = "1"
 
 Vagrant.configure("2") do |config|
-  config.vm.box = "generic/ubuntu2204"
+  config.vm.box = "bento/ubuntu-24.04"
   config.vm.provider :libvirt
   config.vm.hostname = "isapavadS"
   config.vm.network "private_network", ip: "192.168.56.110"
@@ -9,8 +9,12 @@ Vagrant.configure("2") do |config|
   config.vm.provider "libvirt" do |lv|
     lv.memory = 2048
     lv.cpus = 2
-    end
+    lv.graphics_type = "none"
+    lv.video_type = "none"
+  end
 
+  config.vm.provision "shell", path: "scripts/network.sh"
+  
   config.vm.provision "shell", path: "scripts/server.sh"
 
 end
