@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: wil-playground
+  namespace: dev
+  labels:
+    app: wil-playground
+spec:
+  type: LoadBalancer
+  selector:
+    app: wil-playground
+  ports:
+    - name: http
+      port: 8888
+      targetPort: 8888
