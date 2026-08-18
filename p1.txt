@@ -47,6 +47,7 @@ vagrant ssh isapavadS
 hostname
 kubectl get nodes -o wide
 sudo systemctl is-active k3s
+ip a
 ip a show eth1
 ip a show $(ip route | grep default | awk '{print $5}')
 logout
