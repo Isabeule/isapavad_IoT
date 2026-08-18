@@ -1,0 +1,42 @@
+KUBERNETES ?
+orchestrateur de conteneurs qui permet de déployer, exécuter, superviser et maintenir des applications 
+conteneurisées sur une ou plusieurs machines. 
+Il organise ces machines en cluster et gère notamment les pods, services, déploiements et le réseau.
+
+K3s?
+Distribution légère de Kubernetes. 
+Elle fournit un cluster Kubernetes avec moins de composants et une installation simplifiée. 
+Dans mon projet, je l’utilise directement dans des VM avec un Server et un Agent.
+
+CLUSTER?
+
+
+PODS?
+Dans p1, il n'y a que des pods systeme crees automatiquement par K3s. Visibles ici:
+vagrant ssh isapavadS
+sudo kubectl get pods -A 
+ou 
+sudo k3s kubectl get pods -A
+
+Comment fonctionne K3s dans P1 ?
+Le Server K3s est installé sur isapavadS. Il crée le cluster et génère un token. 
+Le Worker isapavadSW utilise l’adresse du Server et ce token pour rejoindre le même cluster comme Agent.
+
+isapavadSW
+192.168.56.111
+      |
+      | K3S_URL + K3S_TOKEN (voir scripts/agent.sh)
+      v
+isapavadS
+192.168.56.110
+      |
+   K3s Server
+
+Qu’est-ce que Vagrant ?
+Vagrant sert a automatiser la creation de VM. On décrit les VM dans un Vagrantfile, 
+puis vagrant up crée, démarre et configure l’environnement avec un provider de virtualisation (libvirt).
+
+À quoi sert le Vagrantfile ?
+Le Vagrantfile décrit l’infrastructure : image Linux, nombre de VMs, hostnames, IP, CPU, RAM, réseau 
+et scripts de provisioning. Au lieu de configurer les VMs manuellement, je décris l’état voulu dans 
+un fichier reproductible.

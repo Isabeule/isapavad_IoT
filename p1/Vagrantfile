@@ -28,6 +28,9 @@ Vagrant.configure("2") do |config|
 
     # Ressources de la machine Ks3 Server.  
     server.vm.provider "libvirt" do |lv|
+      lv.driver = "qemu"
+      lv.cpu_mode = "custom"
+      lv.cpu_model = "qemu64"
       lv.memory = 1024
       lv.cpus = 1
     end
@@ -51,6 +54,9 @@ Vagrant.configure("2") do |config|
 
     # Ressources de la machine Ks3 Worker.
     worker.vm.provider "libvirt" do |lv|
+      lv.driver = "qemu"
+      lv.cpu_mode = "custom"
+      lv.cpu_model = "qemu64"
       lv.memory = 1024
       lv.cpus = 1
     end
