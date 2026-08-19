@@ -8,7 +8,9 @@ spec:
   source:
     repoURL: https://github.com/Isabeule/isapavad_IoT.git
     targetRevision: HEAD
-    path: manifests
+    path: p3/confs
+    directory:
+      include: '{deployment.yaml,service.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
@@ -16,3 +18,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

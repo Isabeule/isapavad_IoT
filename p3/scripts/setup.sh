@@ -12,7 +12,8 @@ RECREATE="false"
 ARGOCD_NS="argocd"
 DEV_NS="dev"
 ARGOCD_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
-ARGOCD_TIMEOUT="300s"
+ARGOCD_TIMEOUT_SECS="600"
+APP_TIMEOUT_SECS="600"
 ARGOCD_UI_PORT="8080"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -127,25 +128,45 @@ install_argocd() {
     fi
 
     log "Installing Argo CD (this pulls several hundred MB of images, be patient)"
-    kubectl apply -n "$ARGOCD_NS" -f "$ARGOCD_MANIFEST"
+    local attempt
+    for attempt in 1 2 3; do
+        if kubectl apply -n "$ARGOCD_NS" -f "$ARGOCD_MANIFEST"; then
+            return 0
+        fi
+        warn "kubectl apply failed (attempt ${attempt}/3), retrying in 5s"
+        sleep 5
+    done
+    die "could not apply the Argo CD manifest after 3 attempts."
 }
 
 
 wait_for_argocd() {
-    log "Waiting for the Argo CD deployments to be Available (up to ${ARGOCD_TIMEOUT})"
-    if ! kubectl wait --for=condition=Available deploy --all \
-            -n "$ARGOCD_NS" --timeout="$ARGOCD_TIMEOUT" >/dev/null; then
-        warn "Some deployments are still not Available."
-        warn "On a slow link this is usually just the image pull. Check with:"
-        warn "  kubectl get pods -n ${ARGOCD_NS}"
-        warn "then rerun this script."
-        die  "Argo CD is not ready yet."
-    fi
+    local deadline now
+    deadline=$(( $(date +%s) + ARGOCD_TIMEOUT_SECS ))
 
+    log "Waiting for the Argo CD CRDs to be established"
+    until kubectl wait --for=condition=Established \
+            crd/applications.argoproj.io --timeout=30s >/dev/null 2>&1; do
+        [ "$(date +%s)" -lt "$deadline" ] \
+            || die "the Argo CD CRDs never became established."
+        sleep 2
+    done
+
+    log "Waiting for the Argo CD deployments to be Available (up to ${ARGOCD_TIMEOUT_SECS}s)"
+    until kubectl wait --for=condition=Available deploy --all \
+            -n "$ARGOCD_NS" --timeout=30s >/dev/null 2>&1; do
+        now="$(date +%s)"
+        if [ "$now" -ge "$deadline" ]; then
+            warn "Some deployments are still not Available. Current state:"
+            kubectl get pods -n "$ARGOCD_NS" >&2 || true
+            die  "Argo CD is not ready after ${ARGOCD_TIMEOUT_SECS}s (slow image pull?). Rerun this script."
+        fi
+        log "  ...still pulling/starting ($(( deadline - now ))s left)"
+    done
 
     log "Waiting for the application controller"
     kubectl rollout status statefulset/argocd-application-controller \
-        -n "$ARGOCD_NS" --timeout="$ARGOCD_TIMEOUT" >/dev/null \
+        -n "$ARGOCD_NS" --timeout="${ARGOCD_TIMEOUT_SECS}s" >/dev/null \
         || die "the argocd-application-controller never became ready."
 
     skip "Argo CD is up"
@@ -156,17 +177,52 @@ deploy_application() {
     [ -f "$APP_MANIFEST" ] || die "application manifest not found: ${APP_MANIFEST}"
 
     log "Applying the Argo CD Application \"${APP_NAME}\""
-    kubectl apply -f "$APP_MANIFEST"
+    local attempt
+    for attempt in 1 2 3; do
+        kubectl apply -f "$APP_MANIFEST" && break
+        [ "$attempt" -lt 3 ] || die "could not apply ${APP_MANIFEST}."
+        warn "kubectl apply failed (attempt ${attempt}/3), retrying in 5s"
+        sleep 5
+    done
 
-    log "Waiting for Argo CD to sync the app into \"${DEV_NS}\" (git poll + image pull, up to ${ARGOCD_TIMEOUT})"
-    if ! kubectl wait --for=condition=Available "deploy/${APP_NAME}" \
-            -n "$DEV_NS" --timeout="$ARGOCD_TIMEOUT" >/dev/null 2>&1; then
-        warn "The app is not Available yet. Argo CD polls git every ~3 min; check with:"
-        warn "  kubectl get application ${APP_NAME} -n ${ARGOCD_NS}"
-        warn "  kubectl get pods -n ${DEV_NS}"
-        return 0
-    fi
+    log "Waiting for Argo CD to sync the app into \"${DEV_NS}\" (up to ${APP_TIMEOUT_SECS}s)"
+    local deadline now
+    deadline=$(( $(date +%s) + APP_TIMEOUT_SECS ))
+
+    # Argo CD ne re-lit git que toutes les ~3 min : on force un refresh
+    # tant que le Deployment n'est pas apparu dans dev.
+    until kubectl get "deploy/${APP_NAME}" -n "$DEV_NS" >/dev/null 2>&1; do
+        now="$(date +%s)"
+        if [ "$now" -ge "$deadline" ]; then
+            warn "Argo CD never created the app. Diagnose with:"
+            warn "  kubectl describe application ${APP_NAME} -n ${ARGOCD_NS}"
+            kubectl get application "$APP_NAME" -n "$ARGOCD_NS" >&2 || true
+            die  "the application was not synced after ${APP_TIMEOUT_SECS}s."
+        fi
+        kubectl -n "$ARGOCD_NS" annotate application "$APP_NAME" \
+            argocd.argoproj.io/refresh=normal --overwrite >/dev/null 2>&1 || true
+        log "  ...waiting for the sync ($(( deadline - now ))s left)"
+        sleep 10
+    done
+
+    log "Waiting for the ${APP_NAME} pod to be ready (image pull)"
+    kubectl rollout status "deploy/${APP_NAME}" -n "$DEV_NS" \
+            --timeout="${APP_TIMEOUT_SECS}s" >/dev/null \
+        || die "the ${APP_NAME} deployment never became ready; check 'kubectl get pods -n ${DEV_NS}'."
+
     skip "Application \"${APP_NAME}\" is Synced and Running in \"${DEV_NS}\""
+}
+
+check_app_responds() {
+    log "Checking that the app answers on http://localhost:${HOST_PORT}/"
+    local deadline
+    deadline=$(( $(date +%s) + 120 ))
+    until curl -fsS "http://localhost:${HOST_PORT}/" >/dev/null 2>&1; do
+        [ "$(date +%s)" -lt "$deadline" ] \
+            || die "no answer on port ${HOST_PORT}; check 'kubectl get svc -n ${DEV_NS}' and the k3d port mapping."
+        sleep 5
+    done
+    skip "curl http://localhost:${HOST_PORT}/ -> $(curl -fsS "http://localhost:${HOST_PORT}/")"
 }
 
 show_admin_password() {
@@ -239,6 +295,7 @@ main() {
     install_argocd
     wait_for_argocd
     deploy_application
+    check_app_responds
     report
     show_admin_password
 
