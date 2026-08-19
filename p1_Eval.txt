@@ -81,4 +81,4 @@ aussi pour assurer le provisioning = configuration automatique d'une machine apr
 eth1 = nom de d'une interface reseau. l'adresse IP correspondante est celle utilisee par la machine 
 pour communiquee avec l'autre machine. c'est l'adresse IP imposee dans le sujet.
 
-COMMANDE ip route = pour demander par ou passent les paquets?
+COMMANDE ip route = pour demander par ou passent les paquets.
