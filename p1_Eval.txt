@@ -13,7 +13,8 @@ conteneurisées sur une ou plusieurs machines.
 Il organise ces machines en cluster et gère notamment les pods, services, déploiements et le réseau.
 
 K3s?
-Distribution légère de Kubernetes. 
+Distribution légère de Kubernetes. K3d est un outil qui permet de creer des clusters K3s a l'interieur 
+de conteneurs Docker.
 Elle fournit un cluster Kubernetes avec moins de composants et une installation simplifiée. 
 Dans mon projet, je l’utilise directement dans des VM avec un Server et un Agent.
 
@@ -73,3 +74,11 @@ puis vagrant up crée, démarre et configure l’environnement avec un provider 
 Le Vagrantfile décrit l’infrastructure : image Linux, nombre de VMs, hostnames, IP, CPU, RAM, réseau 
 et scripts de provisioning. Au lieu de configurer les VMs manuellement, je décris l’état voulu dans 
 un fichier reproductible.
+
+COMMANDE ip a = affiche les interfaces reseau d'une machine et les adresses IP qui lui sont attribuees.
+eth0 = nom du reseau de gestion Vagrant et libvirt, c'est pour pouvoir communiquer via SSH notamment, et
+aussi pour assurer le provisioning = configuration automatique d'une machine apres sa creation.
+eth1 = nom de d'une interface reseau. l'adresse IP correspondante est celle utilisee par la machine 
+pour communiquee avec l'autre machine. c'est l'adresse IP imposee dans le sujet.
+
+COMMANDE ip route = pour demander par ou passent les paquets?
