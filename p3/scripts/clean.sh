@@ -330,7 +330,7 @@ report() {
     printf '  argocd CLI      %s\n' "$(argocd version --client --short 2>/dev/null | head -n1 || echo 'not installed')"
     printf '  vagrant         %s\n' "$(vagrant --version 2>/dev/null || echo 'not installed')"
     if command -v virsh >/dev/null 2>&1; then
-        printf '  p1/p2 domains   %s\n' "$(virsh -c qemu:///system list --all --name 2>/dev/null | grep -cE '^(p1|p2)_' || echo 0)"
+        printf '  p1/p2 domains   %s\n' "$(virsh -c qemu:///system list --all --name 2>/dev/null | grep -cE '^(p1|p2)_' || true)"
     fi
     echo
 }

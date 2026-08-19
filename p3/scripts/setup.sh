@@ -12,6 +12,7 @@ RECREATE="false"
 ARGOCD_NS="argocd"
 DEV_NS="dev"
 ARGOCD_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+ARGOCD_POLL_INTERVAL="30s"
 ARGOCD_TIMEOUT_SECS="600"
 APP_TIMEOUT_SECS="600"
 ARGOCD_UI_PORT="8080"
@@ -45,6 +46,16 @@ check_prereqs() {
 
 
     if ! docker info >/dev/null 2>&1; then
+        # Si l'utilisateur est dans le groupe docker mais que ce shell ne l'a
+        # pas encore (pas de relogin depuis install.sh), on se relance via sg.
+        if [ -z "${IOT_SG_REEXEC:-}" ] \
+            && getent group docker | cut -d: -f4 | tr ',' '\n' | grep -qx "$(id -un)"; then
+            warn "docker group not active in this shell; re-running via 'sg docker'."
+            export IOT_SG_REEXEC=1
+            local reexec_args=()
+            [ "$RECREATE" = "true" ] && reexec_args+=(--recreate)
+            exec sg docker -c "$(printf '%q ' bash "$0" ${reexec_args[@]+"${reexec_args[@]}"})"
+        fi
         warn "Cannot talk to the Docker daemon."
         die  "Log out and back in (or run 'newgrp docker'), then rerun this script."
     fi
@@ -140,6 +151,31 @@ install_argocd() {
         sleep 5
     done
     die "could not apply the Argo CD manifest after 3 attempts."
+}
+
+
+configure_argocd() {
+    local current
+    current="$(kubectl -n "$ARGOCD_NS" get configmap argocd-cm \
+        -o jsonpath='{.data.timeout\.reconciliation}' 2>/dev/null || true)"
+    if [ "$current" = "$ARGOCD_POLL_INTERVAL" ]; then
+        skip "Argo CD already polls git every ${ARGOCD_POLL_INTERVAL}"
+        return 0
+    fi
+
+    log "Setting the git polling interval to ${ARGOCD_POLL_INTERVAL} (default: 3m)"
+    kubectl -n "$ARGOCD_NS" patch configmap argocd-cm --type merge \
+        -p "{\"data\":{\"timeout.reconciliation\":\"${ARGOCD_POLL_INTERVAL}\"}}" >/dev/null
+
+    # Le controller ne lit ce reglage qu'au demarrage : inutile de le
+    # redemarrer sur une installation fraiche (il n'a pas encore demarre),
+    # seulement s'il tournait deja avec l'ancienne valeur.
+    if [ "$(kubectl -n "$ARGOCD_NS" get statefulset argocd-application-controller \
+            -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" = "1" ]; then
+        log "Restarting the application controller to pick up the new interval"
+        kubectl -n "$ARGOCD_NS" rollout restart \
+            statefulset/argocd-application-controller >/dev/null
+    fi
 }
 
 
@@ -296,6 +332,7 @@ main() {
     ensure_namespace "$ARGOCD_NS"
     ensure_namespace "$DEV_NS"
     install_argocd
+    configure_argocd
     wait_for_argocd
     deploy_application
     check_app_responds
