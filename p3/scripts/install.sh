@@ -192,8 +192,9 @@ install_argocd_cli() {
     if command -v sha256sum >/dev/null 2>&1 \
         && curl -fsSL -o "$WORKDIR/cli_checksums.txt" "${base}/cli_checksums.txt"; then
         ( cd "$WORKDIR" \
-            && grep " argocd-linux-${arch}$" cli_checksums.txt > argocd.sha256 \
-            && sed -i "s| argocd-linux-${arch}$|  argocd|" argocd.sha256 \
+            && awk -v f="argocd-linux-${arch}" '$2 == f { print $1 "  argocd" }' \
+                cli_checksums.txt > argocd.sha256 \
+            && [ -s argocd.sha256 ] \
             && sha256sum --check --quiet argocd.sha256 ) \
             || warn "could not verify the argocd checksum."
     else

@@ -123,14 +123,17 @@ ensure_namespace() {
 
 install_argocd() {
     if kubectl get deployment argocd-server -n "$ARGOCD_NS" >/dev/null 2>&1; then
-        skip "Argo CD is already installed in the \"${ARGOCD_NS}\" namespace"
-        return 0
+        log "Argo CD already present, re-applying the manifest (idempotent)"
+    else
+        log "Installing Argo CD (this pulls several hundred MB of images, be patient)"
     fi
 
-    log "Installing Argo CD (this pulls several hundred MB of images, be patient)"
+    # --server-side: le CRD applicationsets depasse la taille max de
+    # l'annotation last-applied-configuration en apply cote client.
     local attempt
     for attempt in 1 2 3; do
-        if kubectl apply -n "$ARGOCD_NS" -f "$ARGOCD_MANIFEST"; then
+        if kubectl apply -n "$ARGOCD_NS" --server-side --force-conflicts \
+                -f "$ARGOCD_MANIFEST"; then
             return 0
         fi
         warn "kubectl apply failed (attempt ${attempt}/3), retrying in 5s"

@@ -85,6 +85,16 @@ user_home() {
     getent passwd "$(target_user)" | cut -d: -f6
 }
 
+# docker/k3d ont besoin du socket docker : si l'utilisateur n'est pas (encore)
+# dans le groupe docker, on passe par root.
+docker_cmd() {
+    if docker info >/dev/null 2>&1; then docker "$@"; else as_root docker "$@"; fi
+}
+
+k3d_cmd() {
+    if docker info >/dev/null 2>&1; then k3d "$@"; else as_root k3d "$@"; fi
+}
+
 pkg_purge() {
     if command -v apt-get >/dev/null 2>&1; then
         # apt-get purge annule TOUT si un seul nom est inconnu :
@@ -130,20 +140,20 @@ delete_k3d_clusters() {
     command -v k3d >/dev/null 2>&1 || { skip "k3d is not installed, no cluster to delete"; return 0; }
 
     local clusters registries
-    clusters="$(k3d cluster list --no-headers 2>/dev/null | awk '{print $1}' || true)"
+    clusters="$(k3d_cmd cluster list --no-headers 2>/dev/null | awk '{print $1}' || true)"
     if [ -n "$clusters" ]; then
         log "Deleting the k3d clusters: $(echo "$clusters" | paste -sd' ' -)"
         # shellcheck disable=SC2086
-        k3d cluster delete $clusters || warn "k3d could not delete every cluster cleanly."
+        k3d_cmd cluster delete $clusters || warn "k3d could not delete every cluster cleanly."
     else
         skip "No k3d cluster"
     fi
 
-    registries="$(k3d registry list --no-headers 2>/dev/null | awk '{print $1}' || true)"
+    registries="$(k3d_cmd registry list --no-headers 2>/dev/null | awk '{print $1}' || true)"
     if [ -n "$registries" ]; then
         log "Deleting the k3d registries"
         # shellcheck disable=SC2086
-        k3d registry delete $registries || warn "some registries could not be deleted."
+        k3d_cmd registry delete $registries || warn "some registries could not be deleted."
     fi
 }
 
@@ -185,10 +195,13 @@ remove_kube_tools() {
 # ----------------------------------------------------------------- docker ----
 
 remove_docker() {
-    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    if command -v docker >/dev/null 2>&1; then
         log "Removing every remaining container, image, volume and network"
-        docker ps -aq | xargs -r docker rm -f >/dev/null 2>&1 || true
-        docker system prune -af --volumes >/dev/null 2>&1 || true
+        local ids
+        ids="$(docker_cmd ps -aq 2>/dev/null || true)"
+        # shellcheck disable=SC2086
+        [ -n "$ids" ] && docker_cmd rm -f $ids >/dev/null 2>&1 || true
+        docker_cmd system prune -af --volumes >/dev/null 2>&1 || true
     fi
 
     if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
