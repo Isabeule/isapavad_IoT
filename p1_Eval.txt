@@ -1,3 +1,12 @@
+DERNIERE VERSION STABLE DE UBUNTU?
+==> SITE UBUNTU LTS RELEASES = Ubuntu 26.04 LTS (Resolute Raccoon)
+
+==> Catalogue public officiel des boxes Vagrant = 
+https://portal.cloud.hashicorp.com/vagrant/discover?utm_source=chatgpt.com
+
+==> Probleme de boot avec la box bento/ubuntu-26.04 --> 
+https://github.com/chef/bento/issues?utm_source=chatgpt.com
+
 KUBERNETES ?
 orchestrateur de conteneurs qui permet de déployer, exécuter, superviser et maintenir des applications 
 conteneurisées sur une ou plusieurs machines. 
@@ -9,7 +18,31 @@ Elle fournit un cluster Kubernetes avec moins de composants et une installation 
 Dans mon projet, je l’utilise directement dans des VM avec un Server et un Agent.
 
 CLUSTER?
+C'est un groupe de nodes (noeuds) qui travaillent ensemble.
 
+NODE?
+c'est le role de la machine lorsqu'elle appartient a un cluster Kubernetes.
+
+kubectl get nodes -o wide ?
+- kubectl = commande kubernetes pour envoyer des requetes a l'API Kubernetes. Ca sert a administrer ou
+consulter le cluster.
+- get nodes = afficher/recuperer des informations sur les ressources Kubernetes.
+- nodes = la ressource demandee
+- -o wide = pour demander une sortie plus detaillee. 
+		ROLES control-plane,master = c'est le type de node. Ici, Server est celui qui pilote
+						le cluster. c'est celui qui gere le cluster. Il recoit
+						les commandes envoyees par kubectl. il connait tous les
+						nodes, les pods et les services qui existent. Autorise 
+						un Worker a rejoindre le cluster. Decide ou placer les 
+						workloads, c-a-d les applications ou services que je 
+						demandes a Kubernetes de faire tourner/executer.
+		VERSION = version Kubernetes/K3s executee par les noeuds
+		INTERNAL-IP = montre les adresses IP avec lesquelles les noeuds sont enregistres dans 
+				K3s. Les 2 noeuds communiquent via leurs IP internes.
+		OS-IMAGE = indique le systeme d'exploitation execute sur le node.
+		KERNEL-VERSION = C'est la version du noyau Linux utilise par la machine.
+		CONTAINER-RUNTIME = indique le moteur utilisé pour exécuter les conteneurs. 
+					Ici K3s utilise containerd.
 
 PODS?
 Dans p1, il n'y a que des pods systeme crees automatiquement par K3s. Visibles ici:
